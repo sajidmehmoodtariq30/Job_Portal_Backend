@@ -5,7 +5,9 @@ const router = express.Router();
 require('dotenv').config();
 
 const { SERVICEM8_CLIENT_ID, SERVICEM8_CLIENT_SECRET, SERVICEM8_REDIRECT_URI } = process.env;
-
+router.get('/',(req, res) =>{
+    res.send("Working");
+})
 // Redirect to ServiceM8 OAuth
 router.get('/auth/servicem8', (req, res) => {
     // Use go.servicem8.com instead of api.servicem8.com
