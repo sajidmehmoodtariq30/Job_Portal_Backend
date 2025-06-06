@@ -138,22 +138,20 @@ const emailTemplates = {
                             
                             ${data.oldStatus && data.newStatus ? `
                             <p style="margin: 10px 0 5px; font-size: 15px;"><strong>Status Change:</strong></p>
-                            <div style="display: flex; align-items: center; margin: 5px 0;">
-                                <span style="display: inline-block; background-color: ${
-                                    data.oldStatus === 'Quote' ? '#dbeafe' : 
-                                    data.oldStatus === 'Work Order' ? '#fef9c3' : 
+                            <div style="display: flex; align-items: center; margin: 5px 0;">                                <span style="display: inline-block; background-color: ${
+                                    data.oldStatus === 'Quote' ? '#ffedd5' : 
+                                    data.oldStatus === 'Work Order' ? '#dbeafe' : 
                                     data.oldStatus === 'Completed' ? '#dcfce7' : '#f3f4f6'
                                 }; padding: 2px 8px; border-radius: 4px; font-size: 14px;">${data.oldStatus}</span>
                                 <span style="margin: 0 10px;">→</span>
                                 <span style="display: inline-block; background-color: ${
-                                    data.newStatus === 'Quote' ? '#dbeafe' : 
-                                    data.newStatus === 'Work Order' ? '#fef9c3' : 
+                                    data.newStatus === 'Quote' ? '#ffedd5' : 
+                                    data.newStatus === 'Work Order' ? '#dbeafe' : 
                                     data.newStatus === 'Completed' ? '#dcfce7' : '#f3f4f6'
                                 }; padding: 2px 8px; border-radius: 4px; font-size: 14px;">${data.newStatus}</span>
-                            </div>
-                            ` : data.status ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Status:</strong> <span style="display: inline-block; background-color: ${
-                                data.status === 'Quote' ? '#dbeafe' : 
-                                data.status === 'Work Order' ? '#fef9c3' : 
+                            </div>                            ` : data.status ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Status:</strong> <span style="display: inline-block; background-color: ${
+                                data.status === 'Quote' ? '#ffedd5' : 
+                                data.status === 'Work Order' ? '#dbeafe' : 
                                 data.status === 'Completed' ? '#dcfce7' : '#f3f4f6'
                             }; padding: 2px 8px; border-radius: 4px; font-size: 14px;">${data.status}</span></p>` : ''}
                             
@@ -167,9 +165,9 @@ const emailTemplates = {
                     <div style="background-color: #f1f5f9; padding: 15px; border-radius: 0 0 6px 6px; font-size: 14px; color: #64748b;">
                         <p style="margin: 5px 0;">This is an automated message from Job Portal.</p>
                         <p style="margin: 5px 0;">© ${new Date().getFullYear()} Job Portal - All rights reserved.</p>
-                    </div>
-                </div>
-            `        };
+                    </div>                </div>
+            `
+        };
     },
     
     jobStatusUpdate: (data) => {
@@ -177,10 +175,9 @@ const emailTemplates = {
             subject: `Job Status Updated: ${data.jobId || data.uuid || 'Job Status Change'}`,
             text: `The job status has been updated to "${data.status}" in the Job Portal system.`,
             html: `
-                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                    <div style="background-color: ${
-                        data.status === 'Quote' ? '#3b82f6' : 
-                        data.status === 'Work Order' ? '#f59e0b' : 
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">                    <div style="background-color: ${
+                        data.status === 'Quote' ? '#f97316' : 
+                        data.status === 'Work Order' ? '#3b82f6' : 
                         data.status === 'Completed' ? '#10b981' : 
                         data.status === 'Unsuccessful' ? '#ef4444' : '#6366f1'
                     }; padding: 15px; border-radius: 6px 6px 0 0;">
@@ -193,21 +190,20 @@ const emailTemplates = {
                             ${data.jobId || data.uuid ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Job ID:</strong> ${data.jobId || data.uuid}</p>` : ''}
                             ${data.description || data.jobDescription ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Description:</strong> ${data.description || data.jobDescription}</p>` : ''}
                             ${data.client ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Client:</strong> ${data.client}</p>` : ''}
-                            
-                            <div style="margin: 15px 0; padding: 10px; background-color: ${
-                                data.status === 'Quote' ? '#eff6ff' : 
-                                data.status === 'Work Order' ? '#fffbeb' : 
+                              <div style="margin: 15px 0; padding: 10px; background-color: ${
+                                data.status === 'Quote' ? '#fff7ed' : 
+                                data.status === 'Work Order' ? '#eff6ff' : 
                                 data.status === 'Completed' ? '#f0fdf4' : 
                                 data.status === 'Unsuccessful' ? '#fef2f2' : '#f8fafc'
                             }; border-radius: 6px; border-left: 4px solid ${
-                                data.status === 'Quote' ? '#3b82f6' : 
-                                data.status === 'Work Order' ? '#f59e0b' : 
+                                data.status === 'Quote' ? '#f97316' : 
+                                data.status === 'Work Order' ? '#3b82f6' : 
                                 data.status === 'Completed' ? '#10b981' : 
                                 data.status === 'Unsuccessful' ? '#ef4444' : '#6366f1'
                             };">
                                 <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${
-                                    data.status === 'Quote' ? '#1e40af' : 
-                                    data.status === 'Work Order' ? '#d97706' : 
+                                    data.status === 'Quote' ? '#c2410c' : 
+                                    data.status === 'Work Order' ? '#1e40af' : 
                                     data.status === 'Completed' ? '#166534' : 
                                     data.status === 'Unsuccessful' ? '#dc2626' : '#4338ca'
                                 };">New Status: ${data.status}</p>
@@ -215,15 +211,13 @@ const emailTemplates = {
                             </div>
                             
                             ${data.date ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Updated:</strong> ${data.date}</p>` : ''}
-                        </div>
-                        <p style="font-size: 15px; color: #475569;">You can view the full job details in the <a href="${data.portalUrl || '#'}" style="color: ${
-                            data.status === 'Quote' ? '#3b82f6' : 
-                            data.status === 'Work Order' ? '#f59e0b' : 
+                        </div>                        <p style="font-size: 15px; color: #475569;">You can view the full job details in the <a href="${data.portalUrl || '#'}" style="color: ${
+                            data.status === 'Quote' ? '#f97316' : 
+                            data.status === 'Work Order' ? '#3b82f6' : 
                             data.status === 'Completed' ? '#10b981' : 
                             data.status === 'Unsuccessful' ? '#ef4444' : '#6366f1'
                         }; text-decoration: none; font-weight: 500;">Job Portal</a>.</p>
-                    </div>
-                    <div style="background-color: #f1f5f9; padding: 15px; border-radius: 0 0 6px 6px; font-size: 14px; color: #64748b;">
+                    </div>                    <div style="background-color: #f1f5f9; padding: 15px; border-radius: 0 0 6px 6px; font-size: 14px; color: #64748b;">
                         <p style="margin: 5px 0;">This is an automated message from Job Portal.</p>
                         <p style="margin: 5px 0;">© ${new Date().getFullYear()} Job Portal - All rights reserved.</p>
                     </div>
@@ -360,12 +354,10 @@ const emailTemplates = {
                 </div>
             `
         };
-    },
-    
-    clientWelcome: (data) => {
+    },    clientWelcome: (data) => {
         return {
             subject: `Welcome to Job Portal, ${data.clientName}!`,
-            text: `Welcome to Job Portal! Your account has been successfully created. Your UUID for login is: ${data.clientId}`,
+            text: `Welcome to Job Portal! Your account has been successfully created. Please use the following link to set up your password: ${data.setupUrl}`,
             html: `
                 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <div style="background-color: #3b82f6; padding: 15px; border-radius: 6px 6px 0 0;">
@@ -373,23 +365,18 @@ const emailTemplates = {
                     </div>
                     <div style="padding: 20px; background-color: #ffffff;">
                         <p style="font-size: 16px; color: #334155;">Thank you for joining Job Portal, ${data.clientName}! Your account has been successfully created.</p>
-                        
-                        <div style="background-color: #f8fafc; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                            <h3 style="margin-top: 0; color: #1e293b; font-size: 18px;">Your Information:</h3>
-                            <p style="margin: 5px 0; font-size: 15px;"><strong>Name:</strong> ${data.clientName}</p>
-                            ${data.address ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Address:</strong> ${data.address}</p>` : ''}
-                            ${data.email ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Email:</strong> ${data.email}</p>` : ''}
-                            ${data.phone ? `<p style="margin: 5px 0; font-size: 15px;"><strong>Phone:</strong> ${data.phone}</p>` : ''}
-                        </div>
-                        
-                        <div style="background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                            <h3 style="margin-top: 0; color: #92400e; font-size: 18px;">Your Login Information:</h3>
-                            <p style="margin: 5px 0; font-size: 15px; color: #92400e;"><strong>Client ID (UUID):</strong> ${data.clientId}</p>
-                            <p style="margin: 5px 0; font-size: 15px; color: #92400e;">Please use this UUID to log in to your client portal.</p>
+                          <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                            <h3 style="margin-top: 0; color: #047857; font-size: 18px;">🔐 Set Up Your Password</h3>
+                            <p style="margin: 5px 0; font-size: 15px; color: #065f46;">To complete your account setup, please click the button below to create your secure password.</p>
+                            ${data.email ? `<p style="margin: 5px 0; font-size: 14px; color: #065f46;"><strong>Email for login:</strong> ${data.email}</p>` : ''}
                         </div>
                         
                         <div style="margin: 25px 0; text-align: center;">
-                            <a href="${process.env.DASHBOARD_URL || data.portalUrl}" style="display: inline-block; background-color: #3b82f6; color: white; text-decoration: none; padding: 12px 25px; border-radius: 4px; font-weight: 500; font-size: 16px;">Access Your Client Portal</a>
+                            <a href="${data.setupUrl}" style="display: inline-block; background-color: #10b981; color: white; text-decoration: none; padding: 15px 30px; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">🔒 Set Up Your Password</a>
+                        </div>
+                        
+                        <div style="background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 12px; margin: 20px 0;">
+                            <p style="margin: 0; font-size: 14px; color: #92400e;"><strong>Important:</strong> This setup link will expire in 24 hours for security reasons. If you need a new link, please contact our support team.</p>
                         </div>
                         
                         <p style="font-size: 15px; color: #475569;">With your client portal, you can:</p>

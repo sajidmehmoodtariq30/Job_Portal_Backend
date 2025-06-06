@@ -4,6 +4,7 @@ const servicem8 = require('@api/servicem8');
 const { getValidAccessToken } = require('../utils/tokenManager');
 const { v4: uuidv4 } = require('uuid');
 const { getUserEmails } = require('../utils/userEmailManager');
+const { generatePasswordSetupToken, authenticateClient } = require('../utils/clientCredentialsManager');
 const axios = require('axios');
 const { Redis } = require('@upstash/redis');
 require('dotenv').config();
@@ -75,8 +76,17 @@ const ensureValidToken = async (req, res, next) => {
     }
 };
 
-// Apply the token middleware to all routes
-router.use(ensureValidToken);
+// Apply the token middleware to routes that need ServiceM8 access (exclude auth-related routes)
+const skipAuthRoutes = ['/password-setup', '/client-login', '/validate-setup-token'];
+
+router.use((req, res, next) => {
+    // Skip authentication for setup and login routes
+    if (skipAuthRoutes.some(route => req.path.includes(route))) {
+        return next();
+    }
+    // Apply authentication for other routes
+    return ensureValidToken(req, res, next);
+});
 
 // GET route to fetch all clients
 router.get('/clients', async (req, res) => {
@@ -115,8 +125,7 @@ router.post('/clients', async (req, res) => {
         
         // Log the response from ServiceM8 to check the structure
         console.log('ServiceM8 client creation response:', clientData);
-        
-        // Add back the email that was ignored by ServiceM8 for our application's use
+          // Add back the email that was ignored by ServiceM8 for our application's use
         const completeClientData = {
             ...newClient,
             ...clientData,
@@ -149,9 +158,7 @@ router.post('/clients', async (req, res) => {
         // Send notification for client creation to admin
         if (completeClientData) {
             const userId = req.body.userId || 'admin-user';
-            await sendClientNotification('clientCreation', completeClientData, userId);
-            
-            // Also send welcome email to the new client if they provided an email
+            await sendClientNotification('clientCreation', completeClientData, userId);            // Also send welcome email to the new client if they provided an email
             if (clientEmail) {
                 await sendClientWelcomeEmail(completeClientData);
             }
@@ -247,10 +254,17 @@ const sendClientWelcomeEmail = async (clientData) => {
             return false;
         }
 
+        // Generate password setup token for the new client
+        const setupToken = await generatePasswordSetupToken(clientData.email, clientData.uuid);
+        if (!setupToken) {
+            console.error('Failed to generate password setup token');
+            return false;
+        }        // Create setup URL with the token
+        const setupUrl = `${getPortalUrl()}/password-setup/${setupToken}`;
+        
         // Prepare data for client welcome email
         const welcomeData = {
             clientName: clientData.name || 'Valued Client',
-            clientId: clientData.uuid, // Changed from uuid to clientId for consistency with email templates
             address: [
                 clientData.address,
                 clientData.address_city,
@@ -260,19 +274,17 @@ const sendClientWelcomeEmail = async (clientData) => {
             ].filter(Boolean).join(', '),
             email: clientData.email,
             phone: clientData.phone,
-            portalUrl: `${getPortalUrl()}/login`, // Changed to direct users to main login page
-        };
-
-        try {
+            setupUrl: setupUrl, // New password setup URL instead of portal URL
+        };        try {
             // First attempt: Try to send welcome email directly to client
-            console.log(`Attempting to send welcome email to client: ${clientData.email}`);
+            console.log(`Attempting to send welcome email with setup link to client: ${clientData.email}`);
             const response = await axios.post(`${API_BASE_URL}/api/notifications/send-templated`, {
                 type: 'clientWelcome',
                 data: welcomeData,
                 recipientEmail: clientData.email
             });
             
-            console.log(`Welcome email sent to new client: ${clientData.email}`);
+            console.log(`Welcome email with password setup link sent to new client: ${clientData.email}`);
             return response.status === 200;
         } catch (directSendError) {
             console.error('Direct client welcome email failed:', directSendError.message);
@@ -285,10 +297,9 @@ const sendClientWelcomeEmail = async (clientData) => {
                     console.log('No admin email found for notification');
                     return false;
                 }
-                
-                // Send a notification to admin about the new client with login info to share
+                  // Send a notification to admin about the new client with login info to share
                 const adminResponse = await axios.post(`${API_BASE_URL}/api/notifications/send`, {
-                    type: 'clientWelcome',
+                    type: 'clientCreation',
                     recipientEmail: adminUserData.primaryEmail,
                     subject: `New Client Portal Account: ${welcomeData.clientName}`,
                     message: `
@@ -297,10 +308,9 @@ A new client has been created but the welcome email could not be sent directly.
 Client Details:
 - Name: ${welcomeData.clientName}
 - Email: ${welcomeData.email}
-- Client ID (for login): ${welcomeData.clientId}
-- Portal URL: ${welcomeData.portalUrl}
+- Setup Link: ${welcomeData.setupUrl}
 
-Please contact the client manually to provide their login information.`
+Please contact the client manually to provide their password setup link.`
                 });
                 
                 console.log(`Fallback notification sent to admin: ${adminUserData.primaryEmail}`);
@@ -558,11 +568,8 @@ router.get('/dashboard-stats/:clientId', async (req, res) => {
         });
         
     } catch (err) {
-        console.error('Error fetching client dashboard stats:', err);
-        
-        // Send fallback mock data if there's an error for development purposes
-        const mockData = createMockDashboardData();
-        res.json(mockData);
+        console.error('Error refreshing access token:', err.response?.data || err.message);
+        res.status(500).json({ error: 'Failed to refresh access token' });
     }
 });
 
@@ -665,9 +672,47 @@ function createMockDashboardData() {
             { id: 2, type: 'quote_received', title: 'New Quote Received', description: 'Security System Upgrade', date: '2025-05-02' },
             { id: 3, type: 'job_completed', title: 'Job Completed', description: 'Digital Signage Installation', date: '2025-04-15' },
             { id: 4, type: 'document_uploaded', title: 'Document Uploaded', description: 'Network Diagram.pdf', date: '2025-04-20' },
-            { id: 5, type: 'invoice_paid', title: 'Invoice Paid', description: 'INV-2025-0056', date: '2025-05-05' }
-        ]    };
+            { id: 5, type: 'invoice_paid', title: 'Invoice Paid', description: 'INV-2025-0056', date: '2025-05-05' }        ]    };
 }
+
+// Route to get client details by UUID (new endpoint for proper name resolution)
+router.get('/client-details/:uuid', async (req, res) => {
+    try {
+        const accessToken = await refreshAccessToken();
+        servicem8.auth(accessToken);
+
+        const { uuid } = req.params;
+
+        const clientData = await handleServiceM8Request(() =>
+            servicem8.getCompanySingle({ uuid })
+        );
+
+        if (clientData && clientData.data) {
+            res.status(200).json({ 
+                success: true, 
+                client: {
+                    uuid: clientData.data.uuid,
+                    name: clientData.data.name,
+                    email: clientData.data.email,
+                    phone: clientData.data.phone,
+                    address: clientData.data.address,
+                    address_city: clientData.data.address_city,
+                    address_state: clientData.data.address_state,
+                    address_postcode: clientData.data.address_postcode,
+                    address_country: clientData.data.address_country
+                }
+            });
+        } else {
+            res.status(404).json({ success: false, message: 'Client not found' });
+        }
+    } catch (err) {
+        console.error('Error fetching client details:', err.response?.data || err.message);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to fetch client details', 
+            details: err.response?.data        });
+    }
+});
 
 // GET route to fetch client permissions
 router.get('/clients/:clientId/permissions', async (req, res) => {
@@ -743,6 +788,7 @@ router.put('/clients/:clientId/permissions', async (req, res) => {
     }
 });
 
+<<<<<<< HEAD
 // PUT route to update client active status
 router.put('/clients/:uuid/status', async (req, res) => {
     try {
@@ -809,6 +855,475 @@ router.put('/clients/:uuid/status', async (req, res) => {
             error: true,
             message: 'Failed to update client status in ServiceM8', 
             details: err.response?.data 
+=======
+// Route for client login with email and password
+router.post('/client-login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ 
+                error: 'Email and password are required' 
+            });
+        }
+
+        // Authenticate client using the credentials manager
+        const authResult = await authenticateClient(email, password);
+
+        if (authResult.success) {
+            // Fetch client data from ServiceM8 using the UUID
+            try {
+                const { data: clientData } = await servicem8.getCompanySingle({ 
+                    uuid: authResult.clientUuid 
+                });
+                
+                res.status(200).json({ 
+                    success: true,
+                    client: {
+                        ...clientData,
+                        email: email // Add email back since ServiceM8 doesn't store it
+                    },
+                    message: 'Login successful'
+                });
+            } catch (fetchError) {
+                console.error('Error fetching client data after authentication:', fetchError);
+                res.status(500).json({ 
+                    error: 'Authentication successful but failed to fetch client data' 
+                });
+            }
+        } else {
+            res.status(401).json({ 
+                error: authResult.message 
+            });
+        }
+    } catch (error) {
+        console.error('Error in client login:', error);
+        res.status(500).json({ 
+            error: 'Internal server error during login' 
+        });
+    }
+});
+
+// Route for password setup (used when client first sets up their account)
+router.post('/password-setup', async (req, res) => {
+    try {
+        console.log('Password setup request received:', { 
+            hasToken: !!req.body.token, 
+            hasPassword: !!req.body.password,
+            tokenLength: req.body.token?.length,
+            body: { ...req.body, password: req.body.password ? '[HIDDEN]' : undefined }
+        });
+
+        const { token, password } = req.body;
+
+        if (!token || !password) {
+            console.log('Missing token or password:', { token: !!token, password: !!password });
+            return res.status(400).json({ 
+                error: 'Token and password are required',
+                details: {
+                    tokenProvided: !!token,
+                    passwordProvided: !!password
+                }
+            });
+        }        // Import the validation and consumption functions
+        const { consumePasswordSetupToken, storeClientCredentials } = require('../utils/clientCredentialsManager');
+
+        console.log('Consuming token for password setup...');
+        // Validate and consume the setup token (single use)
+        const tokenData = await consumePasswordSetupToken(token);
+
+        if (!tokenData.valid) {
+            console.log('Token validation failed:', tokenData);
+            return res.status(400).json({ 
+                error: 'Invalid or expired setup token',
+                message: tokenData.message || 'Token validation failed'
+            });
+        }
+
+        console.log('Token valid, storing credentials for:', tokenData.email);
+        // Store the client's credentials
+        const success = await storeClientCredentials(
+            tokenData.email, 
+            password, 
+            tokenData.clientUuid
+        );
+
+        if (success) {
+            console.log('Password setup completed successfully for:', tokenData.email);
+            res.status(200).json({ 
+                success: true, 
+                message: 'Password setup completed successfully',
+                email: tokenData.email
+            });
+        } else {
+            console.log('Failed to store credentials for:', tokenData.email);
+            res.status(500).json({ 
+                error: 'Failed to store credentials' 
+            });
+        }
+    } catch (error) {
+        console.error('Error in password setup:', error);
+        res.status(500).json({ 
+            error: 'Internal server error during password setup',
+            details: error.message
+        });
+    }
+});
+
+// Route to validate a password setup token (for frontend validation)
+router.get('/validate-setup-token/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        console.log('Token validation request received for token:', token?.substring(0, 10) + '...');
+
+        const { validatePasswordSetupToken } = require('../utils/clientCredentialsManager');
+        const tokenData = await validatePasswordSetupToken(token);
+        
+        console.log('Token validation result:', { valid: tokenData.valid, email: tokenData.email });
+
+        if (tokenData.valid) {
+            // Fetch client name from ServiceM8 (only if we have valid ServiceM8 auth)
+            let clientName = 'Client';
+            try {
+                // Skip ServiceM8 fetch for now since this route doesn't have auth
+                console.log('Skipping ServiceM8 client name fetch for setup validation');
+            } catch (fetchError) {
+                console.error('Error fetching client name:', fetchError);
+                // Continue with default name
+            }
+
+            res.status(200).json({ 
+                valid: true, 
+                email: tokenData.email,
+                clientName: clientName
+            });
+        } else {
+            res.status(400).json({ 
+                valid: false, 
+                message: 'Invalid or expired setup token'
+            });
+        }
+    } catch (error) {
+        console.error('Error validating setup token:', error);
+        res.status(500).json({ 
+            error: 'Internal server error during token validation' 
+        });    }
+});
+
+// ========== CLIENT NAME MAPPING ROUTES ==========
+
+// Helper function to store client name mappings
+const storeClientNameMapping = async (mappingData) => {
+    try {
+        const mappingKey = `client:name_mapping:${mappingData.id}`;
+        const dataWithTimestamp = {
+            ...mappingData,
+            createdAt: mappingData.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isActive: mappingData.isActive !== undefined ? mappingData.isActive : true
+        };
+        
+        await redis.set(mappingKey, dataWithTimestamp);
+        
+        // Also maintain an index of all mappings for easy retrieval
+        const indexKey = 'client:name_mappings_index';
+        let currentIndex = await redis.get(indexKey) || [];
+        if (!Array.isArray(currentIndex)) {
+            currentIndex = [];
+        }
+        
+        // Add or update in index
+        const existingIndex = currentIndex.findIndex(m => m.id === mappingData.id);
+        if (existingIndex >= 0) {
+            currentIndex[existingIndex] = { id: mappingData.id, email: mappingData.clientEmail };
+        } else {
+            currentIndex.push({ id: mappingData.id, email: mappingData.clientEmail });
+        }
+        
+        await redis.set(indexKey, currentIndex);
+        console.log(`Stored client name mapping for ${mappingData.clientEmail}`);
+        return true;
+    } catch (error) {
+        console.error('Error storing client name mapping:', error);
+        return false;
+    }
+};
+
+// Helper function to get all client name mappings
+const getAllClientNameMappings = async () => {
+    try {
+        const indexKey = 'client:name_mappings_index';
+        const mappingIndex = await redis.get(indexKey) || [];
+        
+        if (!Array.isArray(mappingIndex) || mappingIndex.length === 0) {
+            return [];
+        }
+        
+        // Fetch all mappings
+        const mappings = [];
+        for (const indexItem of mappingIndex) {
+            const mappingKey = `client:name_mapping:${indexItem.id}`;
+            const mapping = await redis.get(mappingKey);
+            if (mapping) {
+                mappings.push(mapping);
+            }
+        }
+        
+        return mappings;
+    } catch (error) {
+        console.error('Error getting client name mappings:', error);
+        return [];
+    }
+};
+
+// Helper function to delete client name mapping
+const deleteClientNameMapping = async (mappingId) => {
+    try {
+        const mappingKey = `client:name_mapping:${mappingId}`;
+        await redis.del(mappingKey);
+        
+        // Remove from index
+        const indexKey = 'client:name_mappings_index';
+        let currentIndex = await redis.get(indexKey) || [];
+        if (Array.isArray(currentIndex)) {
+            currentIndex = currentIndex.filter(m => m.id !== mappingId);
+            await redis.set(indexKey, currentIndex);
+        }
+        
+        console.log(`Deleted client name mapping ${mappingId}`);
+        return true;
+    } catch (error) {
+        console.error('Error deleting client name mapping:', error);
+        return false;
+    }
+};
+
+// GET all client name mappings
+router.get('/clients/mappings', async (req, res) => {
+    try {
+        const mappings = await getAllClientNameMappings();
+        res.status(200).json({
+            success: true,
+            data: mappings
+        });
+    } catch (error) {
+        console.error('Error fetching client name mappings:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch client name mappings',
+            details: error.message
+        });
+    }
+});
+
+// POST create new client name mapping
+router.post('/clients/mappings', async (req, res) => {
+    try {
+        const { clientEmail, displayName, username, clientUuid } = req.body;
+        
+        if (!clientEmail || !displayName || !username) {
+            return res.status(400).json({
+                success: false,
+                error: 'clientEmail, displayName, and username are required'
+            });
+        }
+        
+        // Check if email or username already exists
+        const existingMappings = await getAllClientNameMappings();
+        const emailExists = existingMappings.find(m => m.clientEmail === clientEmail);
+        const usernameExists = existingMappings.find(m => m.username === username);
+        
+        if (emailExists) {
+            return res.status(400).json({
+                success: false,
+                error: 'A mapping for this email already exists'
+            });
+        }
+        
+        if (usernameExists) {
+            return res.status(400).json({
+                success: false,
+                error: 'This username is already taken'
+            });
+        }
+        
+        // Create new mapping
+        const newMapping = {
+            id: Date.now().toString(), // Simple ID generation for now
+            clientEmail,
+            displayName,
+            username,
+            clientUuid: clientUuid || null,
+            isActive: true,
+            createdAt: new Date().toISOString()
+        };
+        
+        const success = await storeClientNameMapping(newMapping);
+        
+        if (success) {
+            res.status(201).json({
+                success: true,
+                message: 'Client name mapping created successfully',
+                data: newMapping
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to store client name mapping'
+            });
+        }
+    } catch (error) {
+        console.error('Error creating client name mapping:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: error.message
+        });
+    }
+});
+
+// PUT update existing client name mapping
+router.put('/clients/mappings/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { clientEmail, displayName, username, clientUuid, isActive } = req.body;
+        
+        if (!clientEmail || !displayName || !username) {
+            return res.status(400).json({
+                success: false,
+                error: 'clientEmail, displayName, and username are required'
+            });
+        }
+        
+        // Check if the mapping exists
+        const mappingKey = `client:name_mapping:${id}`;
+        const existingMapping = await redis.get(mappingKey);
+        
+        if (!existingMapping) {
+            return res.status(404).json({
+                success: false,
+                error: 'Client name mapping not found'
+            });
+        }
+        
+        // Check for conflicts with other mappings (excluding current one)
+        const allMappings = await getAllClientNameMappings();
+        const emailConflict = allMappings.find(m => m.id !== id && m.clientEmail === clientEmail);
+        const usernameConflict = allMappings.find(m => m.id !== id && m.username === username);
+        
+        if (emailConflict) {
+            return res.status(400).json({
+                success: false,
+                error: 'A mapping for this email already exists'
+            });
+        }
+        
+        if (usernameConflict) {
+            return res.status(400).json({
+                success: false,
+                error: 'This username is already taken'
+            });
+        }
+        
+        // Update mapping
+        const updatedMapping = {
+            ...existingMapping,
+            clientEmail,
+            displayName,
+            username,
+            clientUuid: clientUuid || null,
+            isActive: isActive !== undefined ? isActive : existingMapping.isActive,
+            updatedAt: new Date().toISOString()
+        };
+        
+        const success = await storeClientNameMapping(updatedMapping);
+        
+        if (success) {
+            res.status(200).json({
+                success: true,
+                message: 'Client name mapping updated successfully',
+                data: updatedMapping
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to update client name mapping'
+            });
+        }
+    } catch (error) {
+        console.error('Error updating client name mapping:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: error.message
+        });
+    }
+});
+
+// DELETE client name mapping
+router.delete('/clients/mappings/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Check if the mapping exists
+        const mappingKey = `client:name_mapping:${id}`;
+        const existingMapping = await redis.get(mappingKey);
+        
+        if (!existingMapping) {
+            return res.status(404).json({
+                success: false,
+                error: 'Client name mapping not found'
+            });
+        }
+        
+        const success = await deleteClientNameMapping(id);
+        
+        if (success) {
+            res.status(200).json({
+                success: true,
+                message: 'Client name mapping deleted successfully'
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to delete client name mapping'
+            });
+        }
+    } catch (error) {
+        console.error('Error deleting client name mapping:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: error.message
+        });
+    }
+});
+
+// GET client name mapping by email (utility endpoint)
+router.get('/clients/mappings/by-email/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        const mappings = await getAllClientNameMappings();
+        const mapping = mappings.find(m => m.clientEmail === email && m.isActive);
+        
+        if (mapping) {
+            res.status(200).json({
+                success: true,
+                data: mapping
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: 'No active mapping found for this email'
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching client name mapping by email:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: error.message
+>>>>>>> 09926ccda26e7d6d4c9dddf40136756dcc57de20
         });
     }
 });
